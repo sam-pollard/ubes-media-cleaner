@@ -1,0 +1,86 @@
+name: Bootstrap Media Audit GitHub updater
+
+on:
+  push:
+    paths:
+      - '.github/workflows/bootstrap-updater.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Patch v1.3.1 updater bootstrap
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          main = Path('plugin/ubes-media-audit.php')
+          php = main.read_text(encoding='utf-8')
+
+          php = php.replace(' * Version: 1.3.0\n', ' * Version: 1.3.1\n', 1)
+          php = php.replace("    const VERSION = '1.3.0';", "    const VERSION = '1.3.1';", 1)
+
+          update_uri = ' * Update URI: https://github.com/sam-pollard/ubes-media-cleaner\n'
+          if update_uri not in php:
+              anchor = ' * Description: Conservative media inventory, usage audit, quarantine/restore and bulk cleanup for the UBES WordPress site.\n'
+              if anchor not in php:
+                  raise SystemExit('Plugin header anchor not found')
+              php = php.replace(anchor, anchor + update_uri, 1)
+
+          include_line = "require_once __DIR__ . '/includes/class-ubes-media-github-updater.php';"
+          if include_line not in php:
+              anchor = "if (!defined('ABSPATH')) {\n    exit;\n}\n"
+              if anchor not in php:
+                  raise SystemExit('ABSPATH guard anchor not found')
+              php = php.replace(anchor, anchor + "\n" + include_line + "\n", 1)
+
+          updater_init = "new UBES_Media_GitHub_Updater(__FILE__, UBES_Media_Audit::VERSION, 'sam-pollard/ubes-media-cleaner', 'ubes-media-audit.zip');"
+          if updater_init not in php:
+              anchor = "register_activation_hook(__FILE__, ['UBES_Media_Audit', 'activate']);\nUBES_Media_Audit::instance();"
+              if anchor not in php:
+                  raise SystemExit('Plugin bootstrap anchor not found')
+              php = php.replace(anchor, updater_init + "\n\n" + anchor, 1)
+
+          main.write_text(php, encoding='utf-8')
+
+          readme = Path('plugin/README.txt')
+          text = readme.read_text(encoding='utf-8') if readme.exists() else ''
+          note = '''\n== 1.3.1 ==\n- Adds native WordPress update support from GitHub Releases.\n- WordPress updates only from published release versions, not ordinary source commits.\n- The existing conservative quarantine-first Media Audit behaviour is unchanged.\n'''
+          if '== 1.3.1 ==' not in text:
+              text = text.rstrip() + '\n' + note
+          readme.write_text(text, encoding='utf-8')
+
+          patched = main.read_text(encoding='utf-8')
+          for marker in [
+              'Version: 1.3.1',
+              "const VERSION = '1.3.1';",
+              'Update URI: https://github.com/sam-pollard/ubes-media-cleaner',
+              'class-ubes-media-github-updater.php',
+              "new UBES_Media_GitHub_Updater(__FILE__, UBES_Media_Audit::VERSION",
+          ]:
+              if marker not in patched:
+                  raise SystemExit('Missing updater marker: ' + marker)
+          PY
+
+      - name: Validate PHP
+        shell: bash
+        run: |
+          find plugin -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - name: Commit v1.3.1 source
+        shell: bash
+        run: |
+          git config user.name "UBES Release Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add plugin
+          git commit -m "Release UBES Media Audit v1.3.1 with GitHub updater" || exit 0
+          git push
