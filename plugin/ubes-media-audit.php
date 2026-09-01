@@ -2,7 +2,8 @@
 /**
  * Plugin Name: UBES Media Audit
  * Description: Conservative media inventory, usage audit, quarantine/restore and bulk cleanup for the UBES WordPress site.
- * Version: 1.3.0
+ * Update URI: https://github.com/sam-pollard/ubes-media-cleaner
+ * Version: 1.3.1
  * Author: UBES
  * Requires at least: 6.5
  * Requires PHP: 8.0
@@ -12,8 +13,10 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+require_once __DIR__ . '/includes/class-ubes-media-github-updater.php';
+
 final class UBES_Media_Audit {
-    const VERSION = '1.3.0';
+    const VERSION = '1.3.1';
     const MENU_SLUG = 'ubes-media-audit';
     const NONCE = 'ubes_media_audit_nonce';
     const STATE_OPTION = 'ubes_ma_scan_state';
@@ -1901,6 +1904,8 @@ JS;
         return '<span class="ubes-ma-badge ' . esc_attr($x[1]) . '">' . esc_html($x[0]) . '</span>';
     }
 }
+
+new UBES_Media_GitHub_Updater(__FILE__, UBES_Media_Audit::VERSION, 'sam-pollard/ubes-media-cleaner', 'ubes-media-audit.zip');
 
 register_activation_hook(__FILE__, ['UBES_Media_Audit', 'activate']);
 UBES_Media_Audit::instance();

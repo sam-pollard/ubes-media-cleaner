@@ -27,3 +27,8 @@ Candidate status is intentionally conservative but is not an absolute guarantee 
 
 
 v1.3.0: Added rendered public-site crawl to catch theme/widget/shortcode references, and rescans can now run while files remain quarantined.
+
+== 1.3.1 ==
+- Adds native WordPress update support from GitHub Releases.
+- WordPress updates only from published release versions, not ordinary source commits.
+- The existing conservative quarantine-first Media Audit behaviour is unchanged.
