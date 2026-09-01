@@ -1,0 +1,70 @@
+name: Bootstrap Media Audit source
+
+on:
+  push:
+    paths:
+      - '.github/workflows/bootstrap-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Extract current plugin ZIP into plugin source
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          import zipfile
+
+          repo = Path.cwd()
+          source = repo / 'ubes-media-audit-v1.3.0.zip'
+          if not source.is_file():
+              raise SystemExit('Missing ubes-media-audit-v1.3.0.zip')
+
+          work = repo / '.media-source-bootstrap'
+          if work.exists():
+              shutil.rmtree(work)
+          extract = work / 'extract'
+          extract.mkdir(parents=True)
+
+          with zipfile.ZipFile(source, 'r') as archive:
+              archive.extractall(extract)
+
+          php_files = list(extract.rglob('ubes-media-audit.php'))
+          if len(php_files) != 1:
+              raise SystemExit(f'Expected one ubes-media-audit.php, found {len(php_files)}')
+
+          plugin_root = php_files[0].parent
+          target = repo / 'plugin'
+          if target.exists():
+              shutil.rmtree(target)
+          shutil.copytree(plugin_root, target)
+
+          print('Recovered plugin root:', plugin_root)
+          print('Recovered files:')
+          for path in sorted(target.rglob('*')):
+              if path.is_file():
+                  print(' -', path.relative_to(repo))
+          PY
+
+      - name: Validate recovered PHP
+        shell: bash
+        run: |
+          find plugin -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - name: Commit recovered source
+        shell: bash
+        run: |
+          git config user.name "UBES Release Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add plugin
+          git commit -m "Recover Media Audit v1.3.0 plugin source" || exit 0
+          git push
