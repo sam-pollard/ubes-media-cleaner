@@ -1,0 +1,75 @@
+name: Publish Media Audit release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'plugin/**'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate plugin
+        shell: bash
+        run: |
+          find plugin -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(sed -n 's/^ \* Version: *//p' plugin/ubes-media-audit.php | head -n1 | tr -d '\r')
+          if [ -z "$VERSION" ]; then
+            echo "Plugin version not found" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check existing release
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build WordPress ZIP
+        if: steps.existing.outputs.exists != 'true'
+        shell: bash
+        run: |
+          rm -rf .release ubes-media-audit.zip
+          mkdir -p .release/ubes-media-audit
+          cp -R plugin/. .release/ubes-media-audit/
+          cd .release
+          zip -qr ../ubes-media-audit.zip ubes-media-audit
+
+      - name: Publish GitHub Release
+        if: steps.existing.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          gh release create "$TAG" ubes-media-audit.zip \
+            --target "$GITHUB_SHA" \
+            --title "UBES Media Audit $VERSION" \
+            --notes "Automated WordPress release for UBES Media Audit $VERSION. This retains the conservative quarantine-first Media Audit workflow and adds native WordPress updates from GitHub Releases."
